@@ -14,6 +14,7 @@ class Phasor {
   float frequency_; // normalized frequency
   float offset_;
   float phase_;
+  
 
  public:
   Phasor(float hertz, float sampleRate, float offset = 0)
@@ -43,11 +44,8 @@ class Phasor {
   }
 };
 
-
-
 Phasor phasor(440.0f, 44100.0f);
-
-
+        
 
 //==============================================================================
 AudioPluginAudioProcessor::AudioPluginAudioProcessor()
@@ -139,6 +137,7 @@ void AudioPluginAudioProcessor::prepareToPlay (double sampleRate, int samplesPer
     // Use this method as the place to do any pre-playback
     // initialisation that you need..
     juce::ignoreUnused (sampleRate, samplesPerBlock);
+
 }
 
 void AudioPluginAudioProcessor::releaseResources()
@@ -186,20 +185,32 @@ void AudioPluginAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer,
     // This is here to avoid people getting screaming feedback
     // when they first compile a plugin, but obviously you don't need to keep
     // this code if your algorithm always overwrites all the output channels.
+
+
+
     for (auto i = totalNumInputChannels; i < totalNumOutputChannels; ++i)
         buffer.clear (i, 0, buffer.getNumSamples());
+//list of variables to get from apvts
+        float gain = apvts.getRawParameterValue("Gain")->load();
+        float sineCurrentFrequency = apvts.getRawParameterValue("sineCurrentFrequency")->load();
+        float sampleRate = static_cast<float>(getSampleRate());
 
-        float gain = *apvts.getRawParameterValue("Gain");
         
+        phasor.frequency(sineCurrentFrequency, sampleRate);
+
+
     // This is the place where you'd normally do the guts of your plugin's
     // audio processing...
     // Make sure to reset the state if your inner loop is processing
     // the samples and the outer loop is handling the channels.
     // Alternatively, you can process the samples with the channels
     // interleaved by keeping the same state.
+    //Phasor phasor(0, currentSampleRate);
+
     juce::HeapBlock<float> b(buffer.getNumSamples()); // allocate array
     for (int sample = 0; sample < buffer.getNumSamples(); ++sample) {
         b[sample] = sin7(phasor());
+        
     }
 
     for (int channel = 0; channel < totalNumInputChannels; ++channel)
@@ -252,8 +263,10 @@ juce::AudioProcessorValueTreeState::ParameterLayout AudioPluginAudioProcessor::c
    std::vector<std::unique_ptr<juce::RangedAudioParameter>> params;
       // Add parameters here, e.g.:
     // layout.add(std::make_unique<juce::AudioParameterFloat>("paramID", "Param Name", 0.0f, 1.0f, 0.5f))
+    //sine wave frequency parameter
     //gain parameter
     params.push_back(std::make_unique<juce::AudioParameterFloat>(juce::ParameterID {"Gain",1}, "Gain", juce::NormalisableRange<float>(0.0f, 4.0f, 0.01f), 1.0f));
+    params.push_back(std::make_unique<juce::AudioParameterFloat>(juce::ParameterID {"sineCurrentFrequency",1}, "sineCurrentFrequency", juce::NormalisableRange<float>(20.0f, 20000.0f, 1.0f, 0.3f), 440.0f));
 
 
     return {params .begin(), params.end()};

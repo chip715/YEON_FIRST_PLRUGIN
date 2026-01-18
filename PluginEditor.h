@@ -19,8 +19,12 @@ private:
     AudioPluginAudioProcessor& processorRef;
     
     juce::Slider gainSlider;
+    juce::Slider frequencySlider;
+
 
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> gainAttachment;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> frequencyAttachment;
+
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (AudioPluginAudioProcessorEditor)
 };
