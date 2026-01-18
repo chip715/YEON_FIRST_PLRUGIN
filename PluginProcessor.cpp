@@ -48,6 +48,7 @@ class Phasor {
 Phasor phasor(440.0f, 44100.0f);
 
 
+
 //==============================================================================
 AudioPluginAudioProcessor::AudioPluginAudioProcessor()
      : AudioProcessor (BusesProperties()
@@ -58,6 +59,8 @@ AudioPluginAudioProcessor::AudioPluginAudioProcessor()
                        .withOutput ("Output", juce::AudioChannelSet::stereo(), true)
                      #endif
                        )
+        , apvts(*this, nullptr, juce::Identifier("APVTS"), createParameters())
+
 {
 }
 
@@ -186,6 +189,8 @@ void AudioPluginAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer,
     for (auto i = totalNumInputChannels; i < totalNumOutputChannels; ++i)
         buffer.clear (i, 0, buffer.getNumSamples());
 
+        float gain = *apvts.getRawParameterValue("Gain");
+        
     // This is the place where you'd normally do the guts of your plugin's
     // audio processing...
     // Make sure to reset the state if your inner loop is processing
@@ -203,7 +208,7 @@ void AudioPluginAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer,
         juce::ignoreUnused (channelData);
 
         for (int sample = 0; sample < buffer.getNumSamples(); ++sample) {
-            channelData[sample] = b[sample];
+            channelData[sample] = b[sample] * gain;
         }
     }
 }
@@ -240,4 +245,16 @@ void AudioPluginAudioProcessor::setStateInformation (const void* data, int sizeI
 juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter()
 {
     return new AudioPluginAudioProcessor();
+}
+
+juce::AudioProcessorValueTreeState::ParameterLayout AudioPluginAudioProcessor::createParameters() 
+{
+   std::vector<std::unique_ptr<juce::RangedAudioParameter>> params;
+      // Add parameters here, e.g.:
+    // layout.add(std::make_unique<juce::AudioParameterFloat>("paramID", "Param Name", 0.0f, 1.0f, 0.5f))
+    //gain parameter
+    params.push_back(std::make_unique<juce::AudioParameterFloat>(juce::ParameterID {"Gain",1}, "Gain", juce::NormalisableRange<float>(0.0f, 4.0f, 0.01f), 1.0f));
+
+
+    return {params .begin(), params.end()};
 }
