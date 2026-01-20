@@ -25,6 +25,14 @@ AudioPluginAudioProcessorEditor::AudioPluginAudioProcessorEditor (AudioPluginAud
 
     frequencyAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processorRef.apvts, "sineCurrentFrequency", frequencySlider);
 
+    
+    addAndMakeVisible(pulseWidthSlider);
+    pulseWidthSlider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 80, 20);
+    pulseWidthSlider.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
+    pulseWidthSlider.setColour(juce::Slider::ColourIds::textBoxBackgroundColourId, juce::Colours::transparentBlack);
+
+    pulseWidthAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processorRef.apvts, "pw", pulseWidthSlider);
+
 }
 
 AudioPluginAudioProcessorEditor::~AudioPluginAudioProcessorEditor()
@@ -47,6 +55,8 @@ void AudioPluginAudioProcessorEditor::resized()
 {
     // This is generally where you'll want to lay out the positions of any
     // subcomponents in your editor..
-    gainSlider.setBounds(100, 100, 100, 100);
-    frequencySlider.setBounds(250, 100, 100, 100);
+    gainSlider.setBounds(50, 100, 100, 100);
+    frequencySlider.setBounds(150, 100, 100, 100);
+    pulseWidthSlider.setBounds(250, 100, 100, 100);
 }
+

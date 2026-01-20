@@ -1,50 +1,10 @@
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
 
-
-/// (0, 1)
-float sin7(float x) {
-    // 7 multiplies + 7 addition/subtraction
-    // 14 operations
-    return static_cast<float>(x * (x * (x * (x * (x * (x * (66.5723768716453 * x - 233.003319050759) + 275.754490892928) - 106.877929605423) + 0.156842000875713) - 9.85899292126983) + 7.25653181200263) - 8.88178419700125e-16);
-}
-
 // functor class
-class Phasor {
-  float frequency_; // normalized frequency
-  float offset_;
-  float phase_;
-  
 
- public:
-  Phasor(float hertz, float sampleRate, float offset = 0)
-      : frequency_(hertz / sampleRate), offset_(offset), phase_(0) {}
 
-      // overload the "call" operator
-  float operator()() {
-    return process();
-  }
 
-  void frequency(float hertz, float sampleRate) {
-    frequency_ = hertz / sampleRate;
-  }
-
-  float process() {
-    // wrap
-    if (phase_ >= 1.0f) {
-      phase_ -= 1.0f;
-    }
-    float output = phase_ + offset_;
-    if (output >= 1.0f) {
-      output -= 1.0f;
-    }
-
-    phase_ += frequency_; // "side effect" // changes internal state
-    return output;
-  }
-};
-
-Phasor phasor(440.0f, 44100.0f);
         
 
 //==============================================================================
@@ -137,7 +97,12 @@ void AudioPluginAudioProcessor::prepareToPlay (double sampleRate, int samplesPer
     // Use this method as the place to do any pre-playback
     // initialisation that you need..
     juce::ignoreUnused (sampleRate, samplesPerBlock);
+    // Reset variables to 0 to ensure clean start
+    osc1_history = 0.0f;
+    osc2_history = 0.0f;
+    filter_history = 0.0f;
 
+    myPhasor = Phasor(440.0f, static_cast<float>(sampleRate));
 }
 
 void AudioPluginAudioProcessor::releaseResources()
@@ -176,6 +141,7 @@ void AudioPluginAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer,
     juce::ignoreUnused (midiMessages);
 
     juce::ScopedNoDenormals noDenormals;
+
     auto totalNumInputChannels  = getTotalNumInputChannels();
     auto totalNumOutputChannels = getTotalNumOutputChannels();
 
@@ -190,14 +156,26 @@ void AudioPluginAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer,
 
     for (auto i = totalNumInputChannels; i < totalNumOutputChannels; ++i)
         buffer.clear (i, 0, buffer.getNumSamples());
-//list of variables to get from apvts
+
+
+        //list of variables to get from apvts
         float gain = apvts.getRawParameterValue("Gain")->load();
         float sineCurrentFrequency = apvts.getRawParameterValue("sineCurrentFrequency")->load();
+        float pw= apvts.getRawParameterValue("pw")->load();; // pulse width of the pulse, 0..1
         float sampleRate = static_cast<float>(getSampleRate());
 
+        // variables and constants
+        float const a0 = 2.5f; // precalculated coeffs
+        float const a1 = -1.5f; // for HF compensation
+        float w = sineCurrentFrequency / sampleRate;
         
-        phasor.frequency(sineCurrentFrequency, sampleRate);
-
+        myPhasor.frequency(sineCurrentFrequency, sampleRate);
+        
+        float n = (0.5f - w);
+        float scaling = 13.0f *n *n*n*n; //calculate scating
+        //float DC = 0.376f - w*0.752f; // DC compensation
+        float norm = 1.0f - 2.0f*w; // calculate normalization
+       
 
     // This is the place where you'd normally do the guts of your plugin's
     // audio processing...
@@ -209,11 +187,44 @@ void AudioPluginAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer,
 
     juce::HeapBlock<float> b(buffer.getNumSamples()); // allocate array
     for (int sample = 0; sample < buffer.getNumSamples(); ++sample) {
-        b[sample] = sin7(phasor());
+
+        float phase = myPhasor.process();//get phasor value
+        //Ocilator 1 (reference)
+        float feedback1= phase+(osc1_history*scaling); //feedback from last output
+
+        float saw1 = feedback1 - std::floor((feedback1));//wrap around using floor
+
+        float osc1 = sin7(saw1); //calculate sinewave 
+
+        float out1 = (osc1 + osc1_history) * 0.5f; //final output with naive integrator
+        osc1_history = out1; //store history
+
+        //Ocilator 2 (phase offset)
+        float phase2_raw = phase + pw; //add pulse width offset
+        if(phase2_raw >= 1.0f) phase2_raw -= 1.0f; //wrap
+
+
+
+        float feedback2= phase2_raw+(osc2_history*scaling); //feedback from last output
+        float saw2 = feedback2 - std::floor((feedback2));//wrap around using floor
+        float osc2 = sin7(saw2); //calculate sinewave
+        float out2 = (osc2 + osc2_history) * 0.5f; //final output with naive integrator
+        osc2_history = out2; //store history
+
+        // pulse wave out 
+        float raw_pulse = out1-out2; //raw pulse wave
+
+        // High-Frequency Compensation Filter
+        float filtered_pulse = (a0 * raw_pulse) + (a1 * filter_history);
+
+        filter_history = raw_pulse; //store filter history
+
+      b[sample] = filtered_pulse * norm;
+        //b[sample] = std::sin(myPhasor() * 2.0f * juce::MathConstants<float>::pi) * 0.1f; //for testing to see if audio works
         
     }
 
-    for (int channel = 0; channel < totalNumInputChannels; ++channel)
+    for (int channel = 0; channel < totalNumOutputChannels; ++channel)
     {
         auto* channelData = buffer.getWritePointer (channel);
         juce::ignoreUnused (channelData);
@@ -269,5 +280,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout AudioPluginAudioProcessor::c
     params.push_back(std::make_unique<juce::AudioParameterFloat>(juce::ParameterID {"sineCurrentFrequency",1}, "sineCurrentFrequency", juce::NormalisableRange<float>(20.0f, 20000.0f, 1.0f, 0.3f), 440.0f));
 
 
+     params.push_back(std::make_unique<juce::AudioParameterFloat>(juce::ParameterID {"pw",1}, "pw", juce::NormalisableRange<float>(0.0f, 1.0f, 0.01f), 0.5f));
+   
     return {params .begin(), params.end()};
 }
