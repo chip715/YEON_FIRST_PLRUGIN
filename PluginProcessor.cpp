@@ -1,11 +1,11 @@
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
+#include "YJMath.h"
 
 // functor class
 
 
-
-        
+ YJMath::Phasor myPhasor(440.0f, 48000.0f, 0.0f); // default 440 Hz at 48kHz sample rate
 
 //==============================================================================
 AudioPluginAudioProcessor::AudioPluginAudioProcessor()
@@ -102,7 +102,7 @@ void AudioPluginAudioProcessor::prepareToPlay (double sampleRate, int samplesPer
     osc2_history = 0.0f;
     filter_history = 0.0f;
 
-    myPhasor = Phasor(440.0f, static_cast<float>(sampleRate));
+   
 }
 
 void AudioPluginAudioProcessor::releaseResources()
@@ -172,7 +172,7 @@ void AudioPluginAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer,
         myPhasor.frequency(sineCurrentFrequency, sampleRate);
         
         float n = (0.5f - w);
-        float scaling = 13.0f *n *n*n*n; //calculate scating
+        float scaling = 13.0f * n * n * n * n; //calculate scating
         //float DC = 0.376f - w*0.752f; // DC compensation
         float norm = 1.0f - 2.0f*w; // calculate normalization
        
@@ -194,7 +194,7 @@ void AudioPluginAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer,
 
         float saw1 = feedback1 - std::floor((feedback1));//wrap around using floor
 
-        float osc1 = sin7(saw1); //calculate sinewave 
+        float osc1 = YJMath::sin7(saw1); //calculate sinewave 
 
         float out1 = (osc1 + osc1_history) * 0.5f; //final output with naive integrator
         osc1_history = out1; //store history
@@ -207,7 +207,7 @@ void AudioPluginAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer,
 
         float feedback2= phase2_raw+(osc2_history*scaling); //feedback from last output
         float saw2 = feedback2 - std::floor((feedback2));//wrap around using floor
-        float osc2 = sin7(saw2); //calculate sinewave
+        float osc2 = YJMath::sin7(saw2); //calculate sinewave
         float out2 = (osc2 + osc2_history) * 0.5f; //final output with naive integrator
         osc2_history = out2; //store history
 
@@ -278,9 +278,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout AudioPluginAudioProcessor::c
     //gain parameter
     params.push_back(std::make_unique<juce::AudioParameterFloat>(juce::ParameterID {"Gain",1}, "Gain", juce::NormalisableRange<float>(0.0f, 4.0f, 0.01f), 1.0f));
     params.push_back(std::make_unique<juce::AudioParameterFloat>(juce::ParameterID {"sineCurrentFrequency",1}, "sineCurrentFrequency", juce::NormalisableRange<float>(20.0f, 20000.0f, 1.0f, 0.3f), 440.0f));
-
-
-     params.push_back(std::make_unique<juce::AudioParameterFloat>(juce::ParameterID {"pw",1}, "pw", juce::NormalisableRange<float>(0.0f, 1.0f, 0.01f), 0.5f));
+    params.push_back(std::make_unique<juce::AudioParameterFloat>(juce::ParameterID {"pw", 1}, "pw", juce::NormalisableRange<float>(0.1f, 0.9f, 0.01f), 0.5f));
    
     return {params .begin(), params.end()};
 }
