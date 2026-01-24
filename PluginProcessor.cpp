@@ -177,15 +177,9 @@ void AudioPluginAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer,
         float norm = 1.0f - 2.0f*w; // calculate normalization
        
 
-    // This is the place where you'd normally do the guts of your plugin's
-    // audio processing...
-    // Make sure to reset the state if your inner loop is processing
-    // the samples and the outer loop is handling the channels.
-    // Alternatively, you can process the samples with the channels
-    // interleaved by keeping the same state.
-    //Phasor phasor(0, currentSampleRate);
-
-    juce::HeapBlock<float> b(buffer.getNumSamples()); // allocate array
+   
+   // juce::HeapBlock<float> b(buffer.getNumSamples()); // allocate array
+   std::vector<float> b(buffer.getNumSamples()); // allocate array stack memeory allocation. 
     for (int sample = 0; sample < buffer.getNumSamples(); ++sample) {
 
         float phase = myPhasor.process();//get phasor value
