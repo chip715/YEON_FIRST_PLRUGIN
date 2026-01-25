@@ -46,15 +46,50 @@ inline float sin7(float x) {
 
 // functor class
 class Phasor {
-  float frequency_; // normalized frequency
-  float offset_;
-  float phase_;
+        // 1. Initialize variables to zero (Fixes Silence/Garbage data)
+        float frequency_ = 0.0f;
+        float offset_    = 0.0f;
+        float phase_     = 0.0f;
 
- public:
-  Phasor(float hertz, float sampleRate, float offset = 0);
-  float operator()();
-  void frequency(float hertz, float sampleRate);
-  float process();
-};
+    public:
+        // Constructor
+        Phasor(float hertz = 440.0f, float sampleRate = 44100.0f, float offset = 0.0f) 
+            : offset_(offset), phase_(0.0f)
+        {
+            frequency(hertz, sampleRate);
+        }
+
+        ~Phasor() = default;
+
+        // Reset (Call in prepareToPlay)
+        void reset() {
+            phase_ = 0.0f;
+            frequency_ = 0.0f;
+            offset_ = 0.0f;
+        }
+
+        // Set Frequency (With Division by Zero Safety)
+        void frequency(float hertz, float sampleRate) {
+            if (sampleRate > 0.0f) {
+                frequency_ = hertz / sampleRate;
+            } else {
+                frequency_ = 0.0f;
+            }
+        }
+
+        // Functor
+        float operator()() { return process(); }
+
+        // Process Logic (Inlined here for speed & to avoid linker errors)
+        inline float process() {
+            if (phase_ >= 1.0f) phase_ -= 1.0f;
+            
+            float output = phase_ + offset_;
+            if (output >= 1.0f) output -= 1.0f;
+
+            phase_ += frequency_;
+            return output;
+        }
+    };
 
 } // namespace YJMath

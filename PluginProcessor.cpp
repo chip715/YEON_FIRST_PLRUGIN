@@ -3,10 +3,6 @@
 #include "YJMath.h"
 
 // functor class
-
-
- YJMath::Phasor myPhasor(440.0f, 48000.0f, 0.0f); // default 440 Hz at 48kHz sample rate
-
 //==============================================================================
 AudioPluginAudioProcessor::AudioPluginAudioProcessor()
      : AudioProcessor (BusesProperties()
@@ -101,6 +97,7 @@ void AudioPluginAudioProcessor::prepareToPlay (double sampleRate, int samplesPer
     osc1_history = 0.0f;
     osc2_history = 0.0f;
     filter_history = 0.0f;
+    myPhasor.reset();
 
    
 }
@@ -153,59 +150,59 @@ void AudioPluginAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer,
     // this code if your algorithm always overwrites all the output channels.
 
 
-
+    //Clear the buffer for  output channels
     for (auto i = totalNumInputChannels; i < totalNumOutputChannels; ++i)
         buffer.clear (i, 0, buffer.getNumSamples());
-
-
-        //list of variables to get from apvts
-        float gain = apvts.getRawParameterValue("Gain")->load();
-        float sineCurrentFrequency = apvts.getRawParameterValue("sineCurrentFrequency")->load();
-        float pw= apvts.getRawParameterValue("pw")->load();; // pulse width of the pulse, 0..1
-        float sampleRate = static_cast<float>(getSampleRate());
-
-        // variables and constants
-        float const a0 = 2.5f; // precalculated coeffs
-        float const a1 = -1.5f; // for HF compensation
-        float w = sineCurrentFrequency / sampleRate;
-        
-        myPhasor.frequency(sineCurrentFrequency, sampleRate);
-        
-        float n = (0.5f - w);
-        float scaling = 13.0f * n * n * n * n; //calculate scating
-        //float DC = 0.376f - w*0.752f; // DC compensation
-        float norm = 1.0f - 2.0f*w; // calculate normalization
+    //get sample rate
+    float sampleRate = static_cast<float>(getSampleRate());
        
+        //list of variables to get from apvts
+    float gain = apvts.getRawParameterValue("Gain")->load();
+    float sineCurrentFrequency = apvts.getRawParameterValue("sineCurrentFrequency")->load();
+    float pw= apvts.getRawParameterValue("pw")->load();; // pulse width of the pulse, 0..1
 
-   
-   // juce::HeapBlock<float> b(buffer.getNumSamples()); // allocate array
-   std::vector<float> b(buffer.getNumSamples()); // allocate array stack memeory allocation. 
-    for (int sample = 0; sample < buffer.getNumSamples(); ++sample) {
+    // Update phasor frequency
+    myPhasor.frequency(sineCurrentFrequency, sampleRate);
+    float w = sineCurrentFrequency / sampleRate;
 
+    //schoffhauzer Scaling calculations
+    float n = std::max(0.0f,0.5f - w);
+    float scaling = 13.0f * n * n * n * n; //calculate scaling but clamping to prevent nyquist ringing
+    //float DC = 0.376f - w*0.752f; // DC compensation
+
+    float norm = 1.0f - 2.0f * w; // calculate normalization
+
+
+    // variables and constants
+    float const a0 = 2.5f; // precalculated coeffs
+    float const a1 = -1.5f; // for HF compensation
+    
+   //main audio buffer pointer for faster access
+    auto* ChannelInfoForCopy = buffer.getWritePointer(0);
+
+    //Synthesis loop
+    for (int sample = 0; sample < buffer.getNumSamples(); ++sample) 
+    {
+        //Get phasor value
         float phase = myPhasor.process();//get phasor value
+
         //Ocilator 1 (reference)
+        //The formula from the reading is x[n]= (x[x[n-1] + sin(phase + scaling* x[n-1])) /2
         float feedback1= phase+(osc1_history*scaling); //feedback from last output
-
-        float saw1 = feedback1 - std::floor((feedback1));//wrap around using floor
-
-        float osc1 = YJMath::sin7(saw1); //calculate sinewave 
-
+        float osc1 = std::sin(feedback1*juce::MathConstants<float>::twoPi); //calculate sinewave in raidans
         float out1 = (osc1 + osc1_history) * 0.5f; //final output with naive integrator
         osc1_history = out1; //store history
 
-        //Ocilator 2 (phase offset)
+        // //Ocilator 2 (phase offset)
         float phase2_raw = phase + pw; //add pulse width offset
         if(phase2_raw >= 1.0f) phase2_raw -= 1.0f; //wrap
 
-
-
         float feedback2= phase2_raw+(osc2_history*scaling); //feedback from last output
-        float saw2 = feedback2 - std::floor((feedback2));//wrap around using floor
-        float osc2 = YJMath::sin7(saw2); //calculate sinewave
+        float osc2 = std::sin(feedback2*juce::MathConstants<float>::twoPi); //calculate sinewave in raidans
         float out2 = (osc2 + osc2_history) * 0.5f; //final output with naive integrator
         osc2_history = out2; //store history
 
-        // pulse wave out 
+        // Subtract the two saw to get pulse wave
         float raw_pulse = out1-out2; //raw pulse wave
 
         // High-Frequency Compensation Filter
@@ -213,19 +210,18 @@ void AudioPluginAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer,
 
         filter_history = raw_pulse; //store filter history
 
-      b[sample] = filtered_pulse * norm;
-        //b[sample] = std::sin(myPhasor() * 2.0f * juce::MathConstants<float>::pi) * 0.1f; //for testing to see if audio works
-        
+        // Write to buffer with normalization and gain
+        ChannelInfoForCopy[sample] = filtered_pulse * norm * gain; //apply normalization and gain
+    
     }
 
-    for (int channel = 0; channel < totalNumOutputChannels; ++channel)
+    for (int currentchannel = 1; currentchannel < totalNumOutputChannels; ++currentchannel)
     {
-        auto* channelData = buffer.getWritePointer (channel);
-        juce::ignoreUnused (channelData);
-
-        for (int sample = 0; sample < buffer.getNumSamples(); ++sample) {
-            channelData[sample] = b[sample] * gain;
-        }
+        //auto* channelData = buffer.getWritePointer (currentchannel);
+        //juce::ignoreUnused (channelData);
+        //copying the first channel to the rest of the channels
+       buffer.copyFrom(currentchannel, 0, buffer, 0, 0, buffer.getNumSamples());
+    
     }
 }
 

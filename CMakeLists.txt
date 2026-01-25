@@ -69,7 +69,6 @@ juce_add_plugin(Yeonsuk_Plugin
 
 target_sources(Yeonsuk_Plugin
     PRIVATE
-        yj_Phasor.cpp
         PluginEditor.cpp
         PluginProcessor.cpp)
 
