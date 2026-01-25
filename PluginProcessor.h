@@ -56,7 +56,6 @@ public:
 
         // variables for my Schoffhauzer Waveforms using FM Modulation 
             // 1. The Feedback Memory (must persist between blocks)
-            YJMath::Phasor myPhasor;
             float osc1_history;    // Memory for Sawtooth A x[n-1]
             float osc2_history;    // Memory for Sawtooth B (the offset one)
             float filter_history; // This stores the HF filter history
