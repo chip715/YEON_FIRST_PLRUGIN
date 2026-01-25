@@ -2,6 +2,9 @@
 
 #include <juce_audio_processors/juce_audio_processors.h>
 #include "YJMath.h"
+
+
+
 //==============================================================================
 class AudioPluginAudioProcessor final : public juce::AudioProcessor
 {
@@ -49,7 +52,7 @@ public:
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (AudioPluginAudioProcessor)
     juce::AudioProcessorValueTreeState::ParameterLayout createParameters();
      // ... all your existing functions ...
- 
+        YJMath::Phasor myPhasor;
 
         // variables for my Schoffhauzer Waveforms using FM Modulation 
             // 1. The Feedback Memory (must persist between blocks)

@@ -1,5 +1,4 @@
 #pragma once
-
 #include <cmath>
 
 namespace YJMath {
@@ -17,42 +16,29 @@ inline float sigmoid(float x) { return 2.0f / (1.0f + expf(-x)) - 1.0f; }
 // XXX softclip, etc.
 
 template <typename F>
-inline F wrap(F value, F high = 1, F low = 0) {
-  jassert(high > low);
-  if (value >= high) {
-    F range = high - low;
-    value -= range;
-    if (value >= high) {
-      // less common case; must use division
-      value -= (F)(unsigned)((value - low) / range);
+    inline F wrap(F value, F high = 1, F low = 0) {
+        if (high <= low) return low; 
+        if (value >= high) {
+            F range = high - low;
+            value -= range;
+            if (value >= high) value -= range * std::floor((value - low) / range);
+        } else if (value < low) {
+            F range = high - low;
+            value += range;
+            if (value < low) value += range * std::floor((high - value) / range);
+        }
+        return value;
     }
-  } else if (value < low) {
-    F range = high - low;
-    value += range;
-    if (value < low) {
-      // less common case; must use division
-      value += (F)(unsigned)((high - value) / range);
-    }
-  }
-  return value;
-}
 
-/// (0, 1)
-inline float sin7(float x) {
-    // 7 multiplies + 7 addition/subtraction
-    // 14 operations
-    return x * (x * (x * (x * (x * (x * (66.5723768716453f * x - 233.003319050759f) + 275.754490892928f) - 106.877929605423f) + 0.156842000875713f) - 9.85899292126983f) + 7.25653181200263f) - 8.88178419700125e-16f;
-}
-
-// functor class
-class Phasor {
-        // 1. Initialize variables to zero (Fixes Silence/Garbage data)
+    // --- Phasor Class ---
+    class Phasor {
+        // 1. Initialize to 0.0f (Prevents garbage data)
         float frequency_ = 0.0f;
         float offset_    = 0.0f;
         float phase_     = 0.0f;
 
     public:
-        // Constructor
+        // Constructor uses the frequency() function below
         Phasor(float hertz = 440.0f, float sampleRate = 44100.0f, float offset = 0.0f) 
             : offset_(offset), phase_(0.0f)
         {
@@ -61,15 +47,17 @@ class Phasor {
 
         ~Phasor() = default;
 
-        // Reset (Call in prepareToPlay)
+        // Reset: Use this in prepareToPlay
         void reset() {
             phase_ = 0.0f;
             frequency_ = 0.0f;
             offset_ = 0.0f;
         }
 
-        // Set Frequency (With Division by Zero Safety)
+        // 2. YOUR FUNCTION (With the Safety Check added)
         void frequency(float hertz, float sampleRate) {
+            // This 'if' is the only thing that matters.
+            // It prevents the "Division by Zero" silence bug.
             if (sampleRate > 0.0f) {
                 frequency_ = hertz / sampleRate;
             } else {
@@ -80,7 +68,7 @@ class Phasor {
         // Functor
         float operator()() { return process(); }
 
-        // Process Logic (Inlined here for speed & to avoid linker errors)
+        // Process
         inline float process() {
             if (phase_ >= 1.0f) phase_ -= 1.0f;
             
@@ -91,5 +79,4 @@ class Phasor {
             return output;
         }
     };
-
-} // namespace YJMath
+}; // namespace YJMath
