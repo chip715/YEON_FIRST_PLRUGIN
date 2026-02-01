@@ -179,4 +179,62 @@ class DelayLine : public ArrayFloat {
   }
 };
 
-} // namespace YJMath
+class MeanFilter {
+    float z1 = 0; // one sample memory
+public: // Added this label
+    // averaging low pass filter H(z)= 0.5 * (1 + z^-1)
+    float operator()(float input) {
+        float output = (input + z1) * 0.5f;
+        z1 = input;
+        return output;
+    }
+};
+
+
+class KarplusStrong {
+public:
+    KarplusStrong(float sampleRate) : mSampleRate(sampleRate) {}
+
+    void frequency(float hertz) {
+        // We calculate the period (L) to determine the read offset
+        mDelaySamples = mSampleRate / hertz;
+        
+        // Ensure the underlying DelayLine is large enough
+        if (mDelaySamples > mDelay.size()) {
+            mDelay.resize((size_t)mDelaySamples + 1);
+        }
+    }
+
+    void pluck() {
+        // To pluck, we fill the current "active" part of the delay line with noise
+        for (int i = 0; i < (int)mDelaySamples; ++i) {
+            float noise = juce::Random::getSystemRandom().nextFloat() * 2.0f - 1.0f;
+            mDelay.write(noise);
+        }
+    }
+
+    float operator()() {
+        // Step A: Read back from the delay line using our calculated offset
+        // This satisfies the "read(samples_ago)" requirement
+        float output = mDelay.read(mDelaySamples);
+
+        // Step B: Filter the output to dampen high frequencies
+        float filtered = mFilter(output);
+
+        // Step C: Apply decay (mFeedbackGain) and write back into the delay line
+        float feedback = filtered * mFeedbackGain;
+        mDelay.write(feedback); // Use .write() instead of .push()
+
+        return output;
+    }
+
+private:
+    float mSampleRate;
+    float mDelaySamples = 100.0f; // Stores the current period length
+    float mFeedbackGain = 0.995f; 
+    
+    DelayLine mDelay; // Inherits from ArrayFloat/std::vector
+    MeanFilter mFilter;
+};
+
+}// namespace YJMath
