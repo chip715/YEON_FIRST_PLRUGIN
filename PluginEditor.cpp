@@ -23,7 +23,7 @@ AudioPluginAudioProcessorEditor::AudioPluginAudioProcessorEditor (AudioPluginAud
     frequencySlider.setSliderStyle(juce::Slider::LinearHorizontal);
     frequencySlider.setColour(juce::Slider::ColourIds::textBoxBackgroundColourId, juce::Colours::transparentBlack);
 
-    frequencyAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processorRef.apvts, "sineCurrentFrequency", frequencySlider);
+    frequencyAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processorRef.apvts, "currentFrequency_in_midi", frequencySlider);
 
     
     addAndMakeVisible(pulseWidthSlider);
@@ -32,6 +32,14 @@ AudioPluginAudioProcessorEditor::AudioPluginAudioProcessorEditor (AudioPluginAud
     pulseWidthSlider.setColour(juce::Slider::ColourIds::textBoxBackgroundColourId, juce::Colours::transparentBlack);
 
     pulseWidthAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processorRef.apvts, "pw", pulseWidthSlider);
+
+    addAndMakeVisible(pluckButton);
+    pluckButton.onClick = [this]
+    {
+        processorRef.karp.pluck();
+    };
+
+
 
 }
 
@@ -64,5 +72,7 @@ void AudioPluginAudioProcessorEditor::resized()
     gainSlider.setBounds(area.removeFromTop(height));
     frequencySlider.setBounds(area.removeFromTop(height));
     pulseWidthSlider.setBounds(area.removeFromTop(height));
+
+    pluckButton.setBounds(20, 20, 100, 30);
 }
 

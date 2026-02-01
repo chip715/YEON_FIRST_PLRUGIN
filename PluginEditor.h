@@ -21,10 +21,13 @@ private:
     juce::Slider gainSlider;
     juce::Slider frequencySlider;
     juce::Slider pulseWidthSlider;
+    juce::TextButton pluckButton {"Pluck"};
 
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> gainAttachment;
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> frequencyAttachment;
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> pulseWidthAttachment;  
+    std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> pluckButtonAttachment;
+
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (AudioPluginAudioProcessorEditor)
 };

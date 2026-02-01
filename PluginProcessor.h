@@ -49,6 +49,7 @@ public:
     YJMath::QuasiSaw q;
     YJMath::Cycle c;
     YJMath::DelayLine delayLine;
+    YJMath::KarplusStrong karp{ 48000.0f }; // default sample rate
 
     private:
     //==============================================================================
@@ -60,7 +61,7 @@ public:
             float osc1_history;    // Memory for Sawtooth A x[n-1]
             float osc2_history;    // Memory for Sawtooth B (the offset one)
             float filter_history; // This stores the HF filter history
-
+            int pluckTimer=0;
 
             
      

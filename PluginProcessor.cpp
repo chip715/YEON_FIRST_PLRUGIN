@@ -92,9 +92,10 @@ void AudioPluginAudioProcessor::prepareToPlay (double sampleRate, int samplesPer
 {
     // Use this method as the place to do any pre-playback
     // initialisation that you need..
-    juce::ignoreUnused (sampleRate, samplesPerBlock);
+    juce::ignoreUnused (sampleRate, samplesPerBlock);\
+    karp =YJMath::KarplusStrong(static_cast<float>(sampleRate));
+    karp.frequency(440.0f);
     // Reset variables to 0 to ensure clean start
-    
 
    
 }
@@ -139,18 +140,11 @@ void AudioPluginAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer,
     auto totalNumInputChannels  = getTotalNumInputChannels();
     auto totalNumOutputChannels = getTotalNumOutputChannels();
 
-    // In case we have more outputs than inputs, this code clears any output
-    // channels that didn't contain input data, (because these aren't
-    // guaranteed to be empty - they may contain garbage).
-    // This is here to avoid people getting screaming feedback
-    // when they first compile a plugin, but obviously you don't need to keep
-    // this code if your algorithm always overwrites all the output channels.
-
     for (auto i = totalNumInputChannels; i < totalNumOutputChannels; ++i)
         buffer.clear (i, 0, buffer.getNumSamples());
 
-    float g = apvts.getParameter("gain")->getValue();
-    float f = apvts.getParameter("currentFrequency")->getValue();
+    float g = apvts.getParameter("Gain")->getValue();
+    float f = apvts.getParameter("currentFrequency_in_midi")->getValue();
     float t = apvts.getParameter("vfilt")->getValue();
     
     // 0.0 to 1.0
@@ -159,7 +153,6 @@ void AudioPluginAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer,
 
     q.frequency(f, static_cast<float>(getSampleRate()));
     q.virtualfilter(t);
-    
     c.frequency(f, static_cast<float>(getSampleRate()));
 
 
@@ -173,17 +166,19 @@ void AudioPluginAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer,
 
     //     b[sample] = c() * g;}
 
+    karp.frequency(f);
+auto* leftChannel  = buffer.getWritePointer(0);
+auto* rightChannel = (totalNumOutputChannels > 1) ? buffer.getWritePointer(1) : nullptr;
 
-    
-
-    for (int channel = 0; channel < totalNumInputChannels; ++channel)
+    for (int sample = 0; sample < buffer.getNumSamples(); ++sample)
     {
-        auto* channelData = buffer.getWritePointer (channel);
-        juce::ignoreUnused (channelData);
+        float output = karp(); // Generate sound (will be silence until button is clicked)
+        
+        output *= g; // Apply gain
 
-        for (int sample = 0; sample < buffer.getNumSamples(); ++sample) {
-           // channelData[sample] = b[sample];
-        }
+        leftChannel[sample] = output;
+        if (rightChannel != nullptr)
+            rightChannel[sample] = output;
     }
 }
 
@@ -229,7 +224,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout AudioPluginAudioProcessor::c
     //sine wave frequency parameter
     //gain parameter
     params.push_back(std::make_unique<juce::AudioParameterFloat>(juce::ParameterID {"Gain",1}, "Gain", juce::NormalisableRange<float>(0.0f, 4.0f, 0.01f), 1.0f));
-    params.push_back(std::make_unique<juce::AudioParameterFloat>(juce::ParameterID {"sineCurrentFrequency",1}, "sineCurrentFrequency", juce::NormalisableRange<float>(20.0f, 20000.0f, 1.0f, 0.3f), 440.0f));
+    params.push_back(std::make_unique<juce::AudioParameterFloat>(juce::ParameterID {"currentFrequency_in_midi",1}, "currentFrequency_in_midi", juce::NormalisableRange<float>(36.0f, 96.0f, 1.0f), 60.0f));
     params.push_back(std::make_unique<juce::AudioParameterFloat>(juce::ParameterID {"pw", 1}, "pw", juce::NormalisableRange<float>(0.1f, 0.9f, 0.01f), 0.5f));
    params.push_back(std::make_unique<juce::AudioParameterFloat>(juce::ParameterID {"vfilt", 1}, "vfilt", juce::NormalisableRange<float>(0.0f, 1.0f, 0.01f), 0.5f));
     return {params .begin(), params.end()};
