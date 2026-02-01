@@ -213,6 +213,13 @@ public:
         }
     }
 
+    void setFeedback(float fb) {
+    // Clamp (0.0 to 0.999) 
+    if (fb > 0.999f) fb = 0.999f;
+    if (fb < 0.0f) fb = 0.0f;
+    mFeedbackGain = fb;
+}
+
     float operator()() {
         // Step A: Read back from the delay line using our calculated offset
         // This satisfies the "read(samples_ago)" requirement

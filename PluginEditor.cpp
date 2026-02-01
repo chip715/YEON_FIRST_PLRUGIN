@@ -39,6 +39,12 @@ AudioPluginAudioProcessorEditor::AudioPluginAudioProcessorEditor (AudioPluginAud
         processorRef.karp.pluck();
     };
 
+    addAndMakeVisible(decaySlider);
+    decaySlider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 80, 20);
+    decaySlider.setSliderStyle(juce::Slider::LinearHorizontal);
+    decaySlider.setColour(juce::Slider::ColourIds::textBoxBackgroundColourId, juce::Colours::transparentBlack);
+
+    decayAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processorRef.apvts, "decay", decaySlider);
 
 
 }
@@ -73,6 +79,11 @@ void AudioPluginAudioProcessorEditor::resized()
     frequencySlider.setBounds(area.removeFromTop(height));
     pulseWidthSlider.setBounds(area.removeFromTop(height));
 
-    pluckButton.setBounds(20, 20, 100, 30);
+  area.removeFromTop(20);
+
+    int buttonWidth = 120;
+    int buttonHeight = 30;
+    pluckButton.setBounds(area.removeFromTop(buttonHeight).withSizeKeepingCentre(buttonWidth, buttonHeight));
+    decaySlider.setBounds(area.removeFromTop(height));
 }
 

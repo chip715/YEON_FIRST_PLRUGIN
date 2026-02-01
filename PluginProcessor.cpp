@@ -146,27 +146,35 @@ void AudioPluginAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer,
     float g = apvts.getParameter("Gain")->getValue();
     float f = apvts.getParameter("currentFrequency_in_midi")->getValue();
     float t = apvts.getParameter("vfilt")->getValue();
+    float d = apvts.getParameter("decay")->getValue();
     
     // 0.0 to 1.0
     g = YJMath::dbtoa(YJMath::map(g, 0.0f, 1.0f, -60.0f, 0.0f)); // -60 dB to 0 dB
     f = YJMath::mtof(YJMath::map(f, 0.0f, 1.0f, 36.0f, 96.0f)); // MIDI 36 to 96
+    float feedback = YJMath::map(d, 0.0f, 1.0f, 0.95f, 0.999f);
 
     q.frequency(f, static_cast<float>(getSampleRate()));
     q.virtualfilter(t);
     c.frequency(f, static_cast<float>(getSampleRate()));
 
 
-    //    float b[buffer.getNumSamples()]; // allocate array
-    // for (int sample = 0; sample < buffer.getNumSamples(); ++sample) {
-    //     // static ky::Phasor env;
-    //     // env.frequency(1.0f / 0.5f, static_cast<float>(getSampleRate())); // 0.5 second period
-    //     // float s = q() * g * (1 - env());
-    //     // delayLine.write(s + 0.7 * delayLine.read(getSampleRate() * 0.3f));
-    //     // b[sample] = s + delayLine.read(getSampleRate() * 0.7f);
+                    //    float b[buffer.getNumSamples()]; // allocate array
+                    // for (int sample = 0; sample < buffer.getNumSamples(); ++sample) {
+                    //     // static ky::Phasor env;
+                    //     // env.frequency(1.0f / 0.5f, static_cast<float>(getSampleRate())); // 0.5 second period
+                    //     // float s = q() * g * (1 - env());
+                    //     // delayLine.write(s + 0.7 * delayLine.read(getSampleRate() * 0.3f));
+                    //     // b[sample] = s + delayLine.read(getSampleRate() * 0.7f);
 
-    //     b[sample] = c() * g;}
+                    //     b[sample] = c() * g;}
 
+
+
+    //Calulaate the KARP
     karp.frequency(f);
+    karp.setFeedback(feedback);
+
+
 auto* leftChannel  = buffer.getWritePointer(0);
 auto* rightChannel = (totalNumOutputChannels > 1) ? buffer.getWritePointer(1) : nullptr;
 
@@ -227,5 +235,6 @@ juce::AudioProcessorValueTreeState::ParameterLayout AudioPluginAudioProcessor::c
     params.push_back(std::make_unique<juce::AudioParameterFloat>(juce::ParameterID {"currentFrequency_in_midi",1}, "currentFrequency_in_midi", juce::NormalisableRange<float>(36.0f, 96.0f, 1.0f), 60.0f));
     params.push_back(std::make_unique<juce::AudioParameterFloat>(juce::ParameterID {"pw", 1}, "pw", juce::NormalisableRange<float>(0.1f, 0.9f, 0.01f), 0.5f));
    params.push_back(std::make_unique<juce::AudioParameterFloat>(juce::ParameterID {"vfilt", 1}, "vfilt", juce::NormalisableRange<float>(0.0f, 1.0f, 0.01f), 0.5f));
+   params.push_back(std::make_unique<juce::AudioParameterFloat>(juce::ParameterID {"decay", 1}, "decay", juce::NormalisableRange<float>(0.0f, 0.999f, 0.01f), 0.5f));
     return {params .begin(), params.end()};
 }
