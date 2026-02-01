@@ -94,10 +94,7 @@ void AudioPluginAudioProcessor::prepareToPlay (double sampleRate, int samplesPer
     // initialisation that you need..
     juce::ignoreUnused (sampleRate, samplesPerBlock);
     // Reset variables to 0 to ensure clean start
-    osc1_history = 0.0f;
-    osc2_history = 0.0f;
-    filter_history = 0.0f;
-    myPhasor.reset();
+    
 
    
 }
@@ -149,79 +146,42 @@ void AudioPluginAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer,
     // when they first compile a plugin, but obviously you don't need to keep
     // this code if your algorithm always overwrites all the output channels.
 
-
-    //Clear the buffer for  output channels
     for (auto i = totalNumInputChannels; i < totalNumOutputChannels; ++i)
         buffer.clear (i, 0, buffer.getNumSamples());
-    //get sample rate
-    float sampleRate = static_cast<float>(getSampleRate());
-       
-        //list of variables to get from apvts
-    float gain = apvts.getRawParameterValue("Gain")->load();
-    float sineCurrentFrequency = apvts.getRawParameterValue("sineCurrentFrequency")->load();
-    float pw= apvts.getRawParameterValue("pw")->load();; // pulse width of the pulse, 0..1
 
-    // Update phasor frequency
-    myPhasor.frequency(sineCurrentFrequency, sampleRate);
-    float w = sineCurrentFrequency / sampleRate;
-
-    //schoffhauzer Scaling calculations
-    float n = std::max(0.0f,0.5f - w);
-    float scaling = 13.0f * n * n * n * n; //calculate scaling but clamping to prevent nyquist ringing
-    //float DC = 0.376f - w*0.752f; // DC compensation
-
-    float norm = 1.0f - 2.0f * w; // calculate normalization
-
-
-    // variables and constants
-    float const a0 = 2.5f; // precalculated coeffs
-    float const a1 = -1.5f; // for HF compensation
+    float g = apvts.getParameter("gain")->getValue();
+    float f = apvts.getParameter("currentFrequency")->getValue();
+    float t = apvts.getParameter("vfilt")->getValue();
     
-   //main audio buffer pointer for faster access
-    auto* ChannelInfoForCopy = buffer.getWritePointer(0);
+    // 0.0 to 1.0
+    g = YJMath::dbtoa(YJMath::map(g, 0.0f, 1.0f, -60.0f, 0.0f)); // -60 dB to 0 dB
+    f = YJMath::mtof(YJMath::map(f, 0.0f, 1.0f, 36.0f, 96.0f)); // MIDI 36 to 96
 
-    //Synthesis loop
-    for (int sample = 0; sample < buffer.getNumSamples(); ++sample) 
-    {
-        //Get phasor value
-        float phase = myPhasor.process();//get phasor value
-
-        //Ocilator 1 (reference)
-        //The formula from the reading is x[n]= (x[x[n-1] + sin(phase + scaling* x[n-1])) /2
-        float feedback1= phase+(osc1_history*scaling); //feedback from last output
-        float osc1 = std::sin(feedback1*juce::MathConstants<float>::twoPi); //calculate sinewave in raidans
-        float out1 = (osc1 + osc1_history) * 0.5f; //final output with naive integrator
-        osc1_history = out1; //store history
-
-        // //Ocilator 2 (phase offset)
-        float phase2_raw = phase + pw; //add pulse width offset
-        if(phase2_raw >= 1.0f) phase2_raw -= 1.0f; //wrap
-
-        float feedback2= phase2_raw+(osc2_history*scaling); //feedback from last output
-        float osc2 = std::sin(feedback2*juce::MathConstants<float>::twoPi); //calculate sinewave in raidans
-        float out2 = (osc2 + osc2_history) * 0.5f; //final output with naive integrator
-        osc2_history = out2; //store history
-
-        // Subtract the two saw to get pulse wave
-        float raw_pulse = out1-out2; //raw pulse wave
-
-        // High-Frequency Compensation Filter
-        float filtered_pulse = (a0 * raw_pulse) + (a1 * filter_history);
-
-        filter_history = raw_pulse; //store filter history
-
-        // Write to buffer with normalization and gain
-        ChannelInfoForCopy[sample] = filtered_pulse * norm * gain; //apply normalization and gain
+    q.frequency(f, static_cast<float>(getSampleRate()));
+    q.virtualfilter(t);
     
+    c.frequency(f, static_cast<float>(getSampleRate()));
+
+
+       float b[buffer.getNumSamples()]; // allocate array
+    for (int sample = 0; sample < buffer.getNumSamples(); ++sample) {
+        // static ky::Phasor env;
+        // env.frequency(1.0f / 0.5f, static_cast<float>(getSampleRate())); // 0.5 second period
+        // float s = q() * g * (1 - env());
+        // delayLine.write(s + 0.7 * delayLine.read(getSampleRate() * 0.3f));
+        // b[sample] = s + delayLine.read(getSampleRate() * 0.7f);
+
+        b[sample] = c() * g;
     }
 
-    for (int currentchannel = 1; currentchannel < totalNumOutputChannels; ++currentchannel)
+    for (int channel = 0; channel < totalNumInputChannels; ++channel)
     {
-        //auto* channelData = buffer.getWritePointer (currentchannel);
-        //juce::ignoreUnused (channelData);
-        //copying the first channel to the rest of the channels
-       buffer.copyFrom(currentchannel, 0, buffer, 0, 0, buffer.getNumSamples());
-    
+        auto* channelData = buffer.getWritePointer (channel);
+        juce::ignoreUnused (channelData);
+
+        for (int sample = 0; sample < buffer.getNumSamples(); ++sample) {
+            channelData[sample] = b[sample];
+        }
     }
 }
 
@@ -269,6 +229,6 @@ juce::AudioProcessorValueTreeState::ParameterLayout AudioPluginAudioProcessor::c
     params.push_back(std::make_unique<juce::AudioParameterFloat>(juce::ParameterID {"Gain",1}, "Gain", juce::NormalisableRange<float>(0.0f, 4.0f, 0.01f), 1.0f));
     params.push_back(std::make_unique<juce::AudioParameterFloat>(juce::ParameterID {"sineCurrentFrequency",1}, "sineCurrentFrequency", juce::NormalisableRange<float>(20.0f, 20000.0f, 1.0f, 0.3f), 440.0f));
     params.push_back(std::make_unique<juce::AudioParameterFloat>(juce::ParameterID {"pw", 1}, "pw", juce::NormalisableRange<float>(0.1f, 0.9f, 0.01f), 0.5f));
-   
+   params.push_back(std::make_unique<juce::AudioParameterFloat>(juce::ParameterID {"vfilt", 1}, "vfilt", juce::NormalisableRange<float>(0.0f, 1.0f, 0.01f), 0.5f));
     return {params .begin(), params.end()};
 }

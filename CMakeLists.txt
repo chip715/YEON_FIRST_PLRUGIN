@@ -70,7 +70,8 @@ juce_add_plugin(Yeonsuk_Plugin
 target_sources(Yeonsuk_Plugin
     PRIVATE
         PluginEditor.cpp
-        PluginProcessor.cpp)
+        PluginProcessor.cpp
+        phasor.cpp)
 
 # `target_compile_definitions` adds some preprocessor definitions to our target. In a Projucer
 # project, these might be passed in the 'Preprocessor Definitions' field. JUCE modules also make use

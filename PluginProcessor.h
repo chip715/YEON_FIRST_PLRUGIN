@@ -1,9 +1,8 @@
 #pragma once
 
 #include <juce_audio_processors/juce_audio_processors.h>
+#include "PluginProcessor.h"
 #include "YJMath.h"
-
-
 
 //==============================================================================
 class AudioPluginAudioProcessor final : public juce::AudioProcessor
@@ -47,19 +46,23 @@ public:
 
     juce::AudioProcessorValueTreeState apvts;
 
+    YJMath::QuasiSaw q;
+    YJMath::Cycle c;
+    YJMath::DelayLine delayLine;
+
     private:
     //==============================================================================
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (AudioPluginAudioProcessor)
     juce::AudioProcessorValueTreeState::ParameterLayout createParameters();
      // ... all your existing functions ...
-        YJMath::Phasor myPhasor;
-
         // variables for my Schoffhauzer Waveforms using FM Modulation 
             // 1. The Feedback Memory (must persist between blocks)
             float osc1_history;    // Memory for Sawtooth A x[n-1]
             float osc2_history;    // Memory for Sawtooth B (the offset one)
             float filter_history; // This stores the HF filter history
 
+
+            
      
             
             /// (0, 1)

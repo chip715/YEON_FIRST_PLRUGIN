@@ -1,11 +1,16 @@
 #pragma once
+#include <vector>
 #include <cmath>
+#include <juce_audio_processors/juce_audio_processors.h>
+
 
 namespace YJMath {
-
+#include <cassert>
 inline float map(float value, float low, float high, float Low, float High) {
   return Low + (High - Low) * ((value - low) / (high - low));
 }
+
+constexpr float PI = 3.14159265358979323846f;
 
 inline float lerp(float a, float b, float t) { return (1.0f - t) * a + t * b; }
 inline float mtof(float m) { return 8.175799f * powf(2.0f, m / 12.0f); }
@@ -16,67 +21,162 @@ inline float sigmoid(float x) { return 2.0f / (1.0f + expf(-x)) - 1.0f; }
 // XXX softclip, etc.
 
 template <typename F>
-    inline F wrap(F value, F high = 1, F low = 0) {
-        if (high <= low) return low; 
-        if (value >= high) {
-            F range = high - low;
-            value -= range;
-            if (value >= high) value -= range * std::floor((value - low) / range);
-        } else if (value < low) {
-            F range = high - low;
-            value += range;
-            if (value < low) value += range * std::floor((high - value) / range);
-        }
-        return value;
+inline F wrap(F value, F high = 1, F low = 0) {
+  jassert(high > low);
+  if (value >= high) {
+    F range = high - low;
+    value -= range;
+    if (value >= high) {
+      // less common case; must use division
+      value -= (F)(unsigned)((value - low) / range);
+    }
+  } else if (value < low) {
+    F range = high - low;
+    value += range;
+    if (value < low) {
+      // less common case; must use division
+      value += (F)(unsigned)((high - value) / range);
+    }
+  }
+  return value;
+}
+
+
+// modf(...)
+// fmod(...)
+template <typename F>
+inline F wrap_fmod(F value, F high = 1, F low = 0) {
+  return low + fmod(value - low, high - low);
+}
+// wrap_fmod<float>(4.2);
+// wrap_fmod(4.2); // make `double wrap_fmod(double value ...)`
+
+
+
+
+class ArrayFloat : public std::vector<float> {
+  public:
+  float lookup(float index) { 
+    int to_the_left = (int)index;
+    int to_the_right = (to_the_left == (size() - 1)) ? 0 : to_the_left + 1;
+    float t = index - (float)to_the_left;
+    return operator[](to_the_left) * (1 - t) + t * operator[](to_the_right);
+  }
+  float phasor(float t) { 
+    return lookup(size() * t);
+  }
+};
+
+
+/// (0, 1)
+inline float sin7(float x) {
+    // 7 multiplies + 7 addition/subtraction
+    // 14 operations
+    return x * (x * (x * (x * (x * (x * (66.5723768716453f * x - 233.003319050759f) + 275.754490892928f) - 106.877929605423f) + 0.156842000875713f) - 9.85899292126983f) + 7.25653181200263f) - 8.88178419700125e-16f;
+}
+
+inline float sint(float t) {
+  struct TableSine : ArrayFloat {
+    TableSine() {
+      resize(4096);
+      for (size_t i = 0; i < size(); ++i) {
+        at(i) = static_cast<float>(sin((2.0 * juce::MathConstants<float>::pi * i) / static_cast<double>(size())));
+        //printf("%f\n", at(i));
+      }
+    }
+  };
+  static TableSine table;
+  return table.phasor(t);
+}
+
+// functor class
+class Phasor {
+  float frequency_ = 0; // normalized frequency
+  float offset_ = 0;
+  
+  protected:
+  float phase_ = 0;
+
+  public:
+  float operator()();
+  void frequency(float hertz, float sampleRate);
+  float process();
+  void reset();
+};
+
+class QuasiSaw {
+  // variables and constants
+  float osc = 0;      // output of the saw oscillator
+  float phase = 0;    // phase accumulator
+  float w = 0;        // normalized frequency
+  float scaling = 0;  // scaling amount
+  float DC = 0;       // DC compensation
+  float norm = 0;              // normalization amount
+  float const a0 = 2.5f;   // precalculated coeffs
+  float const a1 = -1.5f;  // for HF compensation
+  float in_hist = 0;           // delay for the HF filter
+
+  float t = 0;
+
+ public:
+  void frequency(float hertz, float samplerate) {
+    // calculate w and scaling
+    w = hertz / samplerate;  // normalized frequency
+    float n = 0.5f - w;
+    scaling = 13.0f * n * n * n * n;  // calculate scaling
+    DC = 0.376f - w * 0.752f;         // calculate DC compensation
+    norm = 1.0f - 2.0f * w;  // calculate normalization
+  }
+
+  void virtualfilter(float t_) { t = t_; }
+
+  float operator()() {
+    // increment accumulator
+    phase += 2.0f * w;
+    if (phase >= 1.0f) {
+      phase -= 2.0f;
     }
 
-    // --- Phasor Class ---
-    class Phasor {
-        // 1. Initialize to 0.0f (Prevents garbage data)
-        float frequency_ = 0.0f;
-        float offset_    = 0.0f;
-        float phase_     = 0.0f;
+    // calculate next sample
+    osc = (osc + sin(2 * juce::MathConstants<float>::pi * (phase + osc * scaling * t))) * 0.5f;
 
-    public:
-        // Constructor uses the frequency() function below
-        Phasor(float hertz = 440.0f, float sampleRate = 44100.0f, float offset = 0.0f) 
-            : offset_(offset), phase_(0.0f)
-        {
-            frequency(hertz, sampleRate);
-        }
+    // compensate HF rolloff
+    float out = a0 * osc + a1 * in_hist;
+    in_hist = osc;
+    out = out + DC;  // compensate DC offset
 
-        ~Phasor() = default;
+    return out * norm;
+  }
+};
 
-        // Reset: Use this in prepareToPlay
-        void reset() {
-            phase_ = 0.0f;
-            frequency_ = 0.0f;
-            offset_ = 0.0f;
-        }
 
-        // 2. YOUR FUNCTION (With the Safety Check added)
-        void frequency(float hertz, float sampleRate) {
-            // This 'if' is the only thing that matters.
-            // It prevents the "Division by Zero" silence bug.
-            if (sampleRate > 0.0f) {
-                frequency_ = hertz / sampleRate;
-            } else {
-                frequency_ = 0.0f;
-            }
-        }
 
-        // Functor
-        float operator()() { return process(); }
+// std::array<type, number> ... on the stack
+// std::vector<type> ... allocates memory on the heap
 
-        // Process
-        inline float process() {
-            if (phase_ >= 1.0f) phase_ -= 1.0f;
-            
-            float output = phase_ + offset_;
-            if (output >= 1.0f) output -= 1.0f;
+struct Cycle : public Phasor {
+  float operator()() {
+    float v = Phasor::operator()();
+    return sint(v);
+  }
+};
 
-            phase_ += frequency_;
-            return output;
-        }
-    };
-}; // namespace YJMath
+class DelayLine : public ArrayFloat {
+  size_t index = 0;
+  public:
+
+  void write(float value) {
+    operator[](index) = value;
+    index = (index + 1) % size();
+  }
+
+  float read(float samples_ago) {
+    float readIndex = (float)index - samples_ago;
+    if (readIndex < 0) {
+      readIndex += (float)size();
+    }
+    return lookup(readIndex);
+  }
+};
+
+} // namespace YJMath
